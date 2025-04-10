@@ -83,7 +83,7 @@ def cross_entropy(
     if denom is not None:
         masked_loss = masked_loss / denom
     else:
-        masked_loss = masked_loss / (shift_attention_mask.mean() + EPSILON)
+        masked_loss = masked_loss / (shift_attention_mask.mean())
     
     return masked_loss
 
