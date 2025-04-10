@@ -607,24 +607,29 @@ def compute_baseline_mined_loss(mined_mapping: List[int], args: Any, loss_args: 
 def compute_uld_loss(args: Any, loss_args: LossArgs) -> Tensor:
     """Universal Logit Distillation loss."""
     # Extract student/teacher logits
-    student_logits = loss_args.student_logits[:, :-1]  # Remove last position
-    teacher_logits = loss_args.teacher_logits[:, :-1]  # Remove last position
+    student_probs = loss_args.student_probs  
+    teacher_probs = loss_args.teacher_probs  
+
+    sorted_student_probs = torch.sort(student_probs, dim=-1, descending=True).values
+    sorted_teacher_probs= torch.sort(teacher_probs, dim=-1, descending=True).values
     
     # Get masking
-    loss_mask = loss_args.batch["loss_mask_new"][:, :-1]
+    vocab_gap = loss_args.new_config.vocab_size - loss_args.teacher_config.vocab_size
+    if vocab_gap > 0:
+        # Teacher vocab is smaller; pad teacher probabilities on the last dimension.
+        sorted_teacher_probs = F.pad(sorted_teacher_probs, (0, vocab_gap), value=0)
+    elif vocab_gap < 0:
+        # Student vocab is smaller; pad student probabilities.
+        sorted_student_probs = F.pad(sorted_student_probs, (0, abs(vocab_gap)), value=0)
     
-    # Calculate token-level MSE
-    loss_fn = nn.MSELoss(reduction='none')
-    token_losses = loss_fn(
-        F.log_softmax(student_logits, dim=-1),
-        F.log_softmax(teacher_logits, dim=-1)
-    )
-    
-    # Apply masking and calculate mean
-    masked_loss = (token_losses * loss_mask.unsqueeze(-1)).mean()
-    
-    return masked_loss
+    token_loss = torch.abs(sorted_student_probs - sorted_teacher_probs).sum(-1)
 
+    # Apply the attention mask and normalize.
+    # The mask is expected to have shape [batch, seq_length] to match token_loss.
+    attention_mask = loss_args.batch["attention_mask_new"]
+    loss = (token_loss * attention_mask).mean() / attention_mask.mean()
+
+    return loss
 
 def compute_dskd_loss(args: Any, loss_args: LossArgs) -> Tensor:
     """Dual Space Knowledge Distillation loss."""
