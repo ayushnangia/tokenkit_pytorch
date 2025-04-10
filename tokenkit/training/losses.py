@@ -578,18 +578,19 @@ def compute_baseline_mined_loss(mined_mapping: List[int], args: Any, loss_args: 
         dim=1,
         index=onehot_index.unsqueeze(-1).expand(-1, -1, loss_args.student_logits.size(-1))
     )
-    
+    kd_temp = args.baseline.kd_temp
+
     # Compute KL divergence for mined aligned tokens
     elementwise_mined_teacher_kl_loss = F.kl_div(
-        F.log_softmax(aligned_student_kl_logits, dim=-1),
-        F.softmax(aligned_teacher_logits, dim=-1),
+        F.log_softmax(aligned_student_kl_logits/ kd_temp, dim=-1),
+        F.softmax(aligned_teacher_logits/ kd_temp, dim=-1),
         reduction='none'
     ).sum(-1)
     
     # Compute KL divergence for non-aligned tokens using onehot targets
     elementwise_onehot_kl_loss = F.kl_div(
-        F.log_softmax(aligned_student_onehot_logits, dim=-1),
-        F.softmax(aligned_onehot_logits, dim=-1),
+        F.log_softmax(aligned_student_onehot_logits/ kd_temp, dim=-1),
+        F.softmax(aligned_onehot_logits/ kd_temp, dim=-1),
         reduction='none'
     ).sum(-1)
     
@@ -620,7 +621,7 @@ def compute_uld_loss(args: Any, loss_args: LossArgs) -> Tensor:
         sorted_teacher_probs = F.pad(sorted_teacher_probs, (0, vocab_gap), value=0)
     elif vocab_gap < 0:
         # Student vocab is smaller; pad student probabilities.
-        sorted_student_probs = F.pad(sorted_student_probs, (0, abs(vocab_gap)), value=0)
+        sorted_student_probs = F.pad(sorted_student_probs, (0, -vocab_gap), value=0)
     
     token_loss = torch.abs(sorted_student_probs - sorted_teacher_probs).sum(-1)
 
