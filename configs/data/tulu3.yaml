@@ -1,0 +1,9 @@
+kind: "hf"
+mix_languages: false
+streaming: false
+shuffle_buffer_size: "inf"
+dataset_configs:
+  - lang_code: en
+    kwargs: 
+      path: allenai/tulu-3-sft-mixture
+      split: train
